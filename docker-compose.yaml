@@ -1,10 +1,58 @@
-version: "3"
+version: '3.8'
 
 services:
-  rest_api:
-    build: .
-    command: /start-reload.sh
+  mysql:
+    image: mysql:5.7
+    container_name: mysql-container
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: student_db
+      MYSQL_USER: user
+      MYSQL_PASSWORD: userpassword
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - app-network
+    ports:
+      - "3000:3306"  # Host port 3000 mapped to container port 3306
+    command: --wait-timeout=28800
+
+  rest-api:
+    build:
+      context: ./app  # Set the build context to the app folder
+    container_name: rest-api-container
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: student_db
+      MYSQL_USER: user
+      MYSQL_PASSWORD: userpassword
+    depends_on:
+      - mysql
+    networks:
+      - app-network
     volumes:
       - ./app:/app
     ports:
-      - "8000:80"
+      - "8000:8000"  # REST API port mapping
+
+  flyway:
+    image: flyway/flyway:latest
+    container_name: flyway-container
+    environment:
+      FLYWAY_URL: jdbc:mysql://mysql:3306/student_db
+      FLYWAY_USER: user
+      FLYWAY_PASSWORD: userpassword
+    volumes:
+      - ./flyway/sql:/flyway/sql
+    depends_on:
+      - mysql
+    networks:
+      - app-network
+    entrypoint: ["flyway", "migrate"]
+
+volumes:
+  mysql-data:
+
+networks:
+  app-network:
+    driver: bridge
