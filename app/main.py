@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Depends, Header, status
 from pydantic import BaseModel
 import asyncmy  
 from typing import Optional
@@ -11,11 +11,19 @@ DB_USER = "user"
 DB_PASSWORD = "userpassword"
 DB_NAME = "student_db"
 
+ADMIN_PASSWORD = "adminpassword"
+
 
 class Student(BaseModel):
     name: str
     student_id: str
     gpa: float 
+
+class Teacher(BaseModel):
+    name:str
+    teacher_id: str
+    subject: str
+    experience: int
 
 async def get_db_connection():
     return await asyncmy.connect(
@@ -25,6 +33,7 @@ async def get_db_connection():
         host=DB_HOST,
         port=3306
     )
+
 
 @app.get("/students", response_model=list[Student])
 async def get_students(sortBy: Optional[str] = None,count : Optional[int] = None):
@@ -47,7 +56,6 @@ async def get_students(sortBy: Optional[str] = None,count : Optional[int] = None
     return students
     
     
-
 @app.get("/students/{student_id}", response_model=Student)
 async def get_specific_student(student_id: str):
     db = await get_db_connection()
@@ -65,8 +73,58 @@ async def get_specific_student(student_id: str):
     return Student(id=student[0], name=student[1], student_id=student[2], gpa=student[3])
 
 
+### **Admin-Only Route: Fetch All Teachers**
+@app.get("/teachers", response_model=list[Teacher])
+async def get_teachers(pw: str = Header(None)):
+    # Authorization check
+    if pw != ADMIN_PASSWORD:
+        print("adminpassword: ", pw)
+        print("ADMIN_PASSWORD: ", ADMIN_PASSWORD)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Unauthorized access. Admin password is required."
+        )
 
+    db = await get_db_connection()
+    try:
+        cursor = db.cursor()
+        await cursor.execute("SELECT * FROM teachers")
+        teachers = await cursor.fetchall()
+
+        return [
+            Teacher(id=row[0], name=row[1], teacher_id=row[2], subject=row[3], experience=row[4])
+            for row in teachers
+        ]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/teachers/batch-delete")
+async def batch_delete_teachers(experience: int, pw: str = Header(None)):
+    # Admin authentication
+    if not pw or pw != ADMIN_PASSWORD:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Unauthorized access. Admin password is required."
+        )
+
+    db = await get_db_connection()
+    try:
+        cursor = db.cursor()
         
+        # Delete teachers with less than the given experience
+        query = "DELETE FROM teachers WHERE experience < %s"
+        await cursor.execute(query, (experience,))
+        affected_rows = cursor.rowcount
+
+        await db.commit()
+
+        return {
+            "message": f"Deleted {affected_rows} teachers with experience less than {experience} years."
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/students", status_code=status.HTTP_201_CREATED)
@@ -101,7 +159,6 @@ async def create_student(student: Student):
     }
 
 
-
 @app.delete("/students/{student_id}", status_code=status.HTTP_200_OK)
 async def delete_student(student_id: str):
     db = await get_db_connection()
@@ -127,7 +184,6 @@ async def delete_student(student_id: str):
         "message": f"Student with student_id {student_id} has been deleted successfully"
     }
 
- 
 
 #To test if server is spinning
 @app.get('/yehaw')

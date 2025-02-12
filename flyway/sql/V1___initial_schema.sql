@@ -4,3 +4,11 @@ CREATE TABLE students (
     student_id VARCHAR(50) NOT NULL UNIQUE,
     gpa FLOAT NOT NULL
 );
+
+CREATE TABLE teachers (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    teacher_id VARCHAR(50) NOT NULL UNIQUE,
+    subject VARCHAR(100) NOT NULL,
+    experience INT NOT NULL
+);
